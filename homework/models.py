@@ -26,8 +26,30 @@ class Classifier(nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        pass
+        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.pool1 = nn.MaxPool2d(2, 2)
+        
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.conv4 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(128)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        
+        self.conv5 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
+        self.bn5 = nn.BatchNorm2d(256)
+        self.conv6 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+        self.bn6 = nn.BatchNorm2d(256)
+        self.pool3 = nn.MaxPool2d(2, 2)
+        
+        self.dropout = nn.Dropout(0.5)
+        self.fc1 = nn.Linear(256 * 8 * 8, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, num_classes)
+        
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -40,8 +62,24 @@ class Classifier(nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 6)
+        z = self.relu(self.bn1(self.conv1(z)))
+        z = self.relu(self.bn2(self.conv2(z)))
+        z = self.pool1(z)
+        
+        z = self.relu(self.bn3(self.conv3(z)))
+        z = self.relu(self.bn4(self.conv4(z)))
+        z = self.pool2(z)
+        
+        z = self.relu(self.bn5(self.conv5(z)))
+        z = self.relu(self.bn6(self.conv6(z)))
+        z = self.pool3(z)
+        
+        z = z.view(z.size(0), -1)
+        z = self.dropout(z)
+        z = self.relu(self.fc1(z))
+        z = self.dropout(z)
+        z = self.relu(self.fc2(z))
+        logits = self.fc3(z)
 
         return logits
 
@@ -78,8 +116,52 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        # TODO: implement
-        pass
+        self.down1 = self._down_block(in_channels, 32, stride=2)
+        self.down2 = self._down_block(32, 64, stride=2)
+        self.down3 = self._down_block(64, 128, stride=2)
+        self.down4 = self._down_block(128, 256, stride=2)
+        
+        self.middle = self._down_block(256, 512, stride=1)
+        
+        self.up1 = self._up_block(512, 256)
+        self.up2 = self._up_block(256 + 256, 128)
+        self.up3 = self._up_block(128 + 128, 64)
+        self.up4 = self._up_block(64 + 64, 32)
+        
+        self.segmentation_head = nn.Sequential(
+            nn.Conv2d(32 + 32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, num_classes, kernel_size=1)
+        )
+        
+        self.depth_head = nn.Sequential(
+            nn.Conv2d(32 + 32, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 1, kernel_size=1),
+            nn.Sigmoid()
+        )
+    
+    def _down_block(self, in_channels, out_channels, stride=1):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+    
+    def _up_block(self, in_channels, out_channels):
+        return nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -97,11 +179,29 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        # TODO: replace with actual forward pass
-        logits = torch.randn(x.size(0), 3, x.size(2), x.size(3))
-        raw_depth = torch.rand(x.size(0), x.size(2), x.size(3))
+        d1 = self.down1(z)
+        d2 = self.down2(d1)
+        d3 = self.down3(d2)
+        d4 = self.down4(d3)
+        
+        m = self.middle(d4)
+        
+        u1 = self.up1(m)
+        u1 = torch.cat([u1, d4], dim=1)
+        
+        u2 = self.up2(u1)
+        u2 = torch.cat([u2, d3], dim=1)
+        
+        u3 = self.up3(u2)
+        u3 = torch.cat([u3, d2], dim=1)
+        
+        u4 = self.up4(u3)
+        u4 = torch.cat([u4, d1], dim=1)
+        
+        logits = self.segmentation_head(u4)
+        depth = self.depth_head(u4).squeeze(1)
 
-        return logits, raw_depth
+        return logits, depth
 
     def predict(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
