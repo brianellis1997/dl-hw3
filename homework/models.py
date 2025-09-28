@@ -26,28 +26,25 @@ class Classifier(nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(32)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(in_channels, 16, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(32)
         self.pool1 = nn.MaxPool2d(2, 2)
         
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(128)
-        self.conv4 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
-        self.bn4 = nn.BatchNorm2d(128)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.bn3 = nn.BatchNorm2d(64)
+        self.conv4 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        self.bn4 = nn.BatchNorm2d(64)
         self.pool2 = nn.MaxPool2d(2, 2)
         
-        self.conv5 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn5 = nn.BatchNorm2d(256)
-        self.conv6 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.bn6 = nn.BatchNorm2d(256)
+        self.conv5 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
+        self.bn5 = nn.BatchNorm2d(128)
         self.pool3 = nn.MaxPool2d(2, 2)
         
         self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(256 * 8 * 8, 512)
-        self.fc2 = nn.Linear(512, 128)
-        self.fc3 = nn.Linear(128, num_classes)
+        self.fc1 = nn.Linear(128 * 8 * 8, 256)
+        self.fc2 = nn.Linear(256, num_classes)
         
         self.relu = nn.ReLU(inplace=True)
 
@@ -71,15 +68,12 @@ class Classifier(nn.Module):
         z = self.pool2(z)
         
         z = self.relu(self.bn5(self.conv5(z)))
-        z = self.relu(self.bn6(self.conv6(z)))
         z = self.pool3(z)
         
         z = z.view(z.size(0), -1)
         z = self.dropout(z)
         z = self.relu(self.fc1(z))
-        z = self.dropout(z)
-        z = self.relu(self.fc2(z))
-        logits = self.fc3(z)
+        logits = self.fc2(z)
 
         return logits
 
