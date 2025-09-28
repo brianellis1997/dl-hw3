@@ -110,30 +110,30 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        self.down1 = self._down_block(in_channels, 32, stride=2)
-        self.down2 = self._down_block(32, 64, stride=2)
-        self.down3 = self._down_block(64, 128, stride=2)
-        self.down4 = self._down_block(128, 256, stride=2)
+        self.down1 = self._down_block(in_channels, 16, stride=2)
+        self.down2 = self._down_block(16, 32, stride=2)
+        self.down3 = self._down_block(32, 64, stride=2)
+        self.down4 = self._down_block(64, 128, stride=2)
         
-        self.middle = self._down_block(256, 512, stride=1)
+        self.middle = self._down_block(128, 256, stride=1)
         
-        self.up1 = self._up_block(512, 256)
-        self.up2 = self._up_block(256 + 256, 128)
-        self.up3 = self._up_block(128 + 128, 64)
-        self.up4 = self._up_block(64 + 64, 32)
+        self.up1 = self._up_block(256, 128)
+        self.up2 = self._up_block(128 + 128, 64)
+        self.up3 = self._up_block(64 + 64, 32)
+        self.up4 = self._up_block(32 + 32, 16)
         
         self.segmentation_head = nn.Sequential(
-            nn.Conv2d(32 + 32, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(16 + 16, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, num_classes, kernel_size=1)
+            nn.Conv2d(16, num_classes, kernel_size=1)
         )
         
         self.depth_head = nn.Sequential(
-            nn.Conv2d(32 + 32, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(16 + 16, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 1, kernel_size=1),
+            nn.Conv2d(16, 1, kernel_size=1),
             nn.Sigmoid()
         )
     
@@ -141,18 +141,12 @@ class Detector(torch.nn.Module):
         return nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
     
     def _up_block(self, in_channels, out_channels):
         return nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
