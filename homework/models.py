@@ -110,43 +110,37 @@ class Detector(torch.nn.Module):
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN))
         self.register_buffer("input_std", torch.as_tensor(INPUT_STD))
 
-        self.down1 = self._down_block(in_channels, 16, stride=2)
-        self.down2 = self._down_block(16, 32, stride=2)
-        self.down3 = self._down_block(32, 64, stride=2)
-        self.down4 = self._down_block(64, 128, stride=2)
+        self.encoder1 = self._conv_block(in_channels, 16)
+        self.encoder2 = self._conv_block(16, 32)
+        self.encoder3 = self._conv_block(32, 64)
+        self.encoder4 = self._conv_block(64, 128)
         
-        self.middle = self._down_block(128, 256, stride=1)
+        self.pool = nn.MaxPool2d(2)
         
-        self.up1 = self._up_block(256, 128)
-        self.up2 = self._up_block(128 + 128, 64)
-        self.up3 = self._up_block(64 + 64, 32)
-        self.up4 = self._up_block(32 + 32, 16)
+        self.bottleneck = self._conv_block(128, 256)
         
-        self.segmentation_head = nn.Sequential(
-            nn.Conv2d(16 + 16, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, num_classes, kernel_size=1)
-        )
+        self.decoder4 = self._conv_block(256 + 128, 128)
+        self.decoder3 = self._conv_block(128 + 64, 64)
+        self.decoder2 = self._conv_block(64 + 32, 32)
+        self.decoder1 = self._conv_block(32 + 16, 16)
         
+        self.upconv4 = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2)
+        self.upconv3 = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2)
+        self.upconv2 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2)
+        self.upconv1 = nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2)
+        
+        self.segmentation_head = nn.Conv2d(16, num_classes, kernel_size=1)
         self.depth_head = nn.Sequential(
-            nn.Conv2d(16 + 16, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
             nn.Conv2d(16, 1, kernel_size=1),
             nn.Sigmoid()
         )
     
-    def _down_block(self, in_channels, out_channels, stride=1):
+    def _conv_block(self, in_channels, out_channels):
         return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
-    
-    def _up_block(self, in_channels, out_channels):
-        return nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
@@ -167,27 +161,34 @@ class Detector(torch.nn.Module):
         # optional: normalizes the input
         z = (x - self.input_mean[None, :, None, None]) / self.input_std[None, :, None, None]
 
-        d1 = self.down1(z)
-        d2 = self.down2(d1)
-        d3 = self.down3(d2)
-        d4 = self.down4(d3)
+        # Encoder
+        enc1 = self.encoder1(z)
+        enc2 = self.encoder2(self.pool(enc1))
+        enc3 = self.encoder3(self.pool(enc2))
+        enc4 = self.encoder4(self.pool(enc3))
         
-        m = self.middle(d4)
+        # Bottleneck
+        bottleneck = self.bottleneck(self.pool(enc4))
         
-        u1 = self.up1(m)
-        u1 = torch.cat([u1, d4], dim=1)
+        # Decoder
+        dec4 = self.upconv4(bottleneck)
+        dec4 = torch.cat([dec4, enc4], dim=1)
+        dec4 = self.decoder4(dec4)
         
-        u2 = self.up2(u1)
-        u2 = torch.cat([u2, d3], dim=1)
+        dec3 = self.upconv3(dec4)
+        dec3 = torch.cat([dec3, enc3], dim=1)
+        dec3 = self.decoder3(dec3)
         
-        u3 = self.up3(u2)
-        u3 = torch.cat([u3, d2], dim=1)
+        dec2 = self.upconv2(dec3)
+        dec2 = torch.cat([dec2, enc2], dim=1)
+        dec2 = self.decoder2(dec2)
         
-        u4 = self.up4(u3)
-        u4 = torch.cat([u4, d1], dim=1)
+        dec1 = self.upconv1(dec2)
+        dec1 = torch.cat([dec1, enc1], dim=1)
+        dec1 = self.decoder1(dec1)
         
-        logits = self.segmentation_head(u4)
-        depth = self.depth_head(u4).squeeze(1)
+        logits = self.segmentation_head(dec1)
+        depth = self.depth_head(dec1).squeeze(1)
 
         return logits, depth
 
