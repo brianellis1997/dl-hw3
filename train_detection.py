@@ -79,9 +79,9 @@ def validate(model, dataloader, seg_criterion, depth_criterion, device):
     avg_depth_loss = total_depth_loss / len(dataloader)
     avg_depth_error = sum(depth_errors) / len(depth_errors)
     
-    metrics = confusion_matrix.iou()
-    mean_iou = sum(metrics.values()) / len(metrics)
-    accuracy = confusion_matrix.global_accuracy()
+    metrics = confusion_matrix.compute()
+    mean_iou = metrics['iou']
+    accuracy = metrics['accuracy']
     
     return avg_seg_loss, avg_depth_loss, mean_iou, accuracy, avg_depth_error
 
