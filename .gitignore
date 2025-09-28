@@ -1,0 +1,60 @@
+# Datasets (large files)
+classification_data/
+drive_data/
+classification_data.zip
+drive_data.zip
+
+# Model weights
+*.th
+*.pth
+*.pt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Submission files
+*.zip
+!homework3.zip
+
+# Logs and outputs
+*.log
+runs/
+logs/
+outputs/
+checkpoints/
+
+# Environment
+venv/
+env/
+ENV/
+.env
+
+# Cache
+.cache/
+*.cache
+
+# Temporary files
+*.tmp
+temp/
+tmp/
